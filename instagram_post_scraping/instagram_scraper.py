@@ -43,7 +43,7 @@ def scrollPageToBottomAndFindPostLinks():
         time.sleep(DELAY_SCROLLER)
         allPosts.append(findPostLinks(driver))
         newHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-        pbar.update(17)
+        pbar.update(16)
     pbar.close()
     return allPosts; 
 
@@ -164,12 +164,15 @@ def parseArgs():
     parser = argparse.ArgumentParser(description='Instagram scraper allows to dump all the public posts and comments from a specified link to a profile.')
     parser.add_argument('-i', '--input_addr', help='Address of an instagram profile to scrape from', required=True)
     parser.add_argument('-o', '--output_file', help='Output file name', default="./instagram_dump" + "_" + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M") + ".xlsx", required=False)
-    parser.add_argument('-v', '--verbose', help='Show additional information or alerts', required=False, default=False)
+    parser.add_argument('-v', '--verbose', help='Show additional information or alerts', required=False, default=False, type=bool, choices=[True, False])
     args = vars(parser.parse_args())
     
+    VERBOSE = args['verbose']
+
     if VERBOSE:
         print("Profile address: " + args['input_addr'])
         print("Output file name: " + args['output_file'])
+
     return args    
 
 ##############################Main me
