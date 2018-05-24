@@ -26,8 +26,7 @@ global URL_TO_SCRAPE, XLSX_OUTPUT_FILE_NAME, VERBOSE
 def scrollPageToBottomAndFindPostLinks():
     #Get total amount of posts:
     try:
-        totalPosts = int(driver.find_element_by_xpath(
-            "//*[@id=\"react-root\"]/section/main/div/header/section/ul/li[1]/span/span").text)
+        totalPosts = int(driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/header/section/ul/li[1]/span/span").text)
     except Exception as Ex:
         totalPosts = 99999
 
@@ -44,7 +43,7 @@ def scrollPageToBottomAndFindPostLinks():
         time.sleep(DELAY_SCROLLER)
         allPosts.append(findPostLinks(driver))
         newHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-        pbar.update(18)
+        pbar.update(17)
     pbar.close()
     return allPosts; 
 
@@ -72,30 +71,38 @@ def getPostData(driver):
     try:
         likes = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/section[2]/div/span/span").text#driver.find_element_by_tag_name('span').text.splitlines()[6].replace(" likes", "")
     except Exception as e:
-        print("Unable to get likes from post: " + post_link + "\n Trying different approach...")
+        if VERBOSE:
+            print("Unable to get likes from post: " + post_link + "\n Trying different approach...")
         try:
             likes = (len(driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/section[2]/div").text.split(",")) + 1)
         except Exception as Ex:
-            print("Different approach didn't work. Value of likes field will be \"Exception\"")
+            if VERBOSE:
+                print("Different approach didn't work. Value of likes field will be \"Exception\"")
             likes = "Exception"
             
     #Getting and processing date
     try:
         date = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text#driver.find_element_by_tag_name('article').text.splitlines()[len(driver.find_element_by_tag_name('article').text.splitlines()) - 2]
     except Exception as e:
-        print("Unable to get date from post: " + post_link)
+        if VERBOSE:
+            print("Unable to get date from post: " + post_link)
         date = "Exception"
         
     if ("," not in date):
+        if VERBOSE:
+            print("Date has a weird format.. " + str(date) + " converting...")
         date = date + ", " + str(datetime.datetime.now().year)
     date = convertDate(date)
+    if VERBOSE:
+        print(date)
     
     if date == "" or " days ago" in driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text.casefold():
         daysAgo = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text.casefold().replace(" days ago", "").replace(" day ago", "")
         try:
             date = datetime.datetime.now() - timedelta(days=int(daysAgo))
         except Exception as ex:
-            print("Exception in getPostData()'s date conversion(daysAgo) part.")
+            if VERBOSE:
+                print("Exception in getPostData()'s date conversion(daysAgo) part.")
 
     firstRun = True
     for a, c in zip(authors, comments):
@@ -112,8 +119,15 @@ def getAllCommentsFromArticle(driver):
     comments = []
     article = driver.find_element_by_tag_name("article")
     comment = article.find_elements_by_tag_name("li")
+    firstRun = True
     for com in comment:
         #print("\n" + com.find_element_by_tag_name("a").text + ", post: " + com.find_element_by_tag_name("span").text)
+        postAuthor = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/header/div[2]/div[1]/div[1]").text
+        if firstRun:
+            if com.find_element_by_tag_name("a").text != postAuthor:
+                authors.append("")
+                comments.append("")
+            firstRun = False
         authors.append(com.find_element_by_tag_name("a").text)
         comments.append(com.find_element_by_tag_name("span").text)
     return authors, comments
@@ -153,8 +167,9 @@ def parseArgs():
     parser.add_argument('-v', '--verbose', help='Show additional information or alerts', required=False, default=False)
     args = vars(parser.parse_args())
     
-    print("Profile address: " + args['input_addr'])
-    print("Output file name: " + args['output_file'])
+    if VERBOSE:
+        print("Profile address: " + args['input_addr'])
+        print("Output file name: " + args['output_file'])
     return args    
 
 ##############################Main me
@@ -199,5 +214,5 @@ if __name__ == "__main__":
     df_sorted = df_sorted.iloc[::-1]
     df_sorted.drop(labels=["index", "entry"], axis=1, inplace=True)
     df_sorted.to_excel(XLSX_OUTPUT_FILE_NAME, index=False)
-
     driver.quit()
+    print("Fin!")
