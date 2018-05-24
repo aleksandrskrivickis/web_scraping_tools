@@ -7,13 +7,14 @@ from selenium import webdriver
 import time
 import pandas as pd
 import re
-import tqdm
+from tqdm import tqdm
 import datetime
 import dateutil.parser as dparser
 from datetime import timedelta
 
 ##############################Constants:
     #Scraper delays(s):
+
 DELAY_GETPOSTDATA = 0.1
 DELAY_GETALLPOSTDATA = 0.1
 DELAY_SCROLLER = 1
@@ -21,13 +22,17 @@ DELAY_COMMENT_EXPANDER = 0.1
 
 ##############################Global vars:
 global URL_TO_SCRAPE, XLSX_OUTPUT_FILE_NAME, VERBOSE
-
-#URL_TO_SCRAPE = ""
-#XLSX_OUTPUT_FILE_NAME = ""
-#VERBOSE = False
-
 ##############################Methods:
 def scrollPageToBottomAndFindPostLinks():
+    #Get total amount of posts:
+    try:
+        totalPosts = int(driver.find_element_by_xpath(
+            "//*[@id=\"react-root\"]/section/main/div/header/section/ul/li[1]/span/span").text)
+    except Exception as Ex:
+        totalPosts = 99999
+
+    pbar = tqdm(total=totalPosts, desc="Getting links for all the posts")
+
     allPosts = []
     
     prevHeight = 0
@@ -39,7 +44,8 @@ def scrollPageToBottomAndFindPostLinks():
         time.sleep(DELAY_SCROLLER)
         allPosts.append(findPostLinks(driver))
         newHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-        
+        pbar.update(18)
+    pbar.close()
     return allPosts; 
 
 def findPostLinks(driver):
@@ -175,7 +181,7 @@ if __name__ == "__main__":
     
     #Parsing every post
     #driver = webdriver.Chrome()
-    for link in tqdm.tqdm(allPosts):
+    for link in tqdm(allPosts, desc="Parsing post data"):
         driver.get(link)
         time.sleep(DELAY_GETALLPOSTDATA)
         allPostData.append(getPostData(driver))
@@ -191,6 +197,7 @@ if __name__ == "__main__":
     df_sorted = df.sort_values(['date', 'entry'], ascending=[True, True])
     df_sorted.reset_index(inplace=True)
     df_sorted = df_sorted.iloc[::-1]
+    df_sorted.drop(labels=["index", "entry"], axis=1, inplace=True)
     df_sorted.to_excel(XLSX_OUTPUT_FILE_NAME, index=False)
 
     driver.quit()
