@@ -11,6 +11,7 @@ from tqdm import tqdm
 import datetime
 import dateutil.parser as dparser
 from datetime import timedelta
+import random
 
 ##############################Constants:
     #Scraper delays(s):
@@ -23,29 +24,50 @@ DELAY_COMMENT_EXPANDER = 0.1
 ##############################Global vars:
 global URL_TO_SCRAPE, XLSX_OUTPUT_FILE_NAME, VERBOSE
 ##############################Methods:
+def updDelayScroller():
+    global DELAY_SCROLLER
+    DELAY_SCROLLER = round(random.uniform(0.1, 2), 2)
+
 def scrollPageToBottomAndFindPostLinks():
+    time.sleep(5)
     #Get total amount of posts:
+    
     try:
-        totalPosts = int(driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/header/section/ul/li[1]/span/span").text)
+        totalPosts = int(driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/header/section/ul/li[1]/span/span").text.replace(",", ""))
     except Exception as Ex:
-        totalPosts = 99999
+        if VERBOSE:
+            print(Ex)
+            print("Unable to locate amount of posts, using 99999 instead.")
+            totalPosts = 9999
 
     pbar = tqdm(total=totalPosts, desc="Getting links for all the posts")
 
-    allPosts = []
+    def scrl(attempts=0, allPosts=[]):
+        if VERBOSE:
+            print("Attempt number: " + str(attempts) + "\n AllPosts len is: " + str(len(allPosts)))
+        if attempts < (totalPosts / 10):
+            prevHeight = 0
+            newHeight = 1
+            while prevHeight != newHeight:
+                prevHeight = int(driver.execute_script("return document.body.scrollHeight;"))
+                driver.execute_script("window.scrollBy(0," + str(-(random.randint(100, 10000))) + ")")
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
+                time.sleep(DELAY_SCROLLER)
+                updDelayScroller()#Random delay
+                allPosts.append(findPostLinks(driver))
+                newHeight = int(driver.execute_script("return document.body.scrollHeight;"))
+                pbar.update(16) 
+            attempts += 1
+            return scrl(attempts, allPosts)
+        else:
+            return allPosts
     
-    prevHeight = 0
-    newHeight = 1
+    allPosts = scrl()
 
-    while prevHeight != newHeight:
-        prevHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
-        time.sleep(DELAY_SCROLLER)
-        allPosts.append(findPostLinks(driver))
-        newHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-        pbar.update(16)
-    pbar.close()
-    return allPosts; 
+    return allPosts
+    
+
+
 
 def findPostLinks(driver):
     posts = []
@@ -62,11 +84,20 @@ def getPostData(driver):
     time.sleep(DELAY_GETPOSTDATA)
     postData = []
     expandAllComments(driver)
-    article = driver.find_element_by_tag_name("article")
     post_link = driver.current_url
-    image_link = driver.find_elements_by_tag_name('img')[1].get_attribute('src')
-    author = article.text.splitlines()[0]
-    authors, comments = getAllCommentsFromArticle(driver)
+    
+    try:
+        image_link = driver.find_elements_by_tag_name('img')[1].get_attribute('src')
+    except Exception as e:
+        image_link = ""
+    
+    if VERBOSE:
+        try:
+            authors, comments = getAllCommentsFromArticle(driver)
+        except Exception as ex:
+            authors = []
+            comments = []
+            print("Exception in getPostData() - unable to get comments from article: " + str(post_link))
     #Getting likes
     try:
         likes = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/section[2]/div/span/span").text#driver.find_element_by_tag_name('span').text.splitlines()[6].replace(" likes", "")
@@ -97,7 +128,12 @@ def getPostData(driver):
         print(date)
     
     if date == "" or " days ago" in driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text.casefold():
-        daysAgo = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text.casefold().replace(" days ago", "").replace(" day ago", "")
+        try:
+            daysAgo = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[2]/div[2]/a/time").text.casefold().replace(" days ago", "").replace(" day ago", "")
+        except Exception as ex:
+            if VERBOSE:
+                print("Exception in getPostData()'s date conversion getting days ago from web page.")
+                daysAgo = 0
         try:
             date = datetime.datetime.now() - timedelta(days=int(daysAgo))
         except Exception as ex:
@@ -122,7 +158,7 @@ def getAllCommentsFromArticle(driver):
     firstRun = True
     for com in comment:
         #print("\n" + com.find_element_by_tag_name("a").text + ", post: " + com.find_element_by_tag_name("span").text)
-        postAuthor = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/header/div[2]/div[1]/div[1]").text
+        postAuthor = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/header/div[2]/div[1]/div[1]/a").text
         if firstRun:
             if com.find_element_by_tag_name("a").text != postAuthor:
                 authors.append("")
@@ -164,7 +200,7 @@ def parseArgs():
     parser = argparse.ArgumentParser(description='Instagram scraper allows to dump all the public posts and comments from a specified link to a profile.')
     parser.add_argument('-i', '--input_addr', help='Address of an instagram profile to scrape from', required=True)
     parser.add_argument('-o', '--output_file', help='Output file name', default="./instagram_dump" + "_" + datetime.datetime.now().strftime("%Y_%m_%d_%H_%M") + ".xlsx", required=False)
-    parser.add_argument('-v', '--verbose', help='Show additional information or alerts', required=False, default=False, type=bool, choices=[True, False])
+    parser.add_argument('-v', '--verbose', help='Show additional information or alerts', required=False, default=True, type=bool, choices=[True, False])
     args = vars(parser.parse_args())
     
     VERBOSE = args['verbose']
@@ -186,6 +222,7 @@ if __name__ == "__main__":
     #Getting all the post links
     driver = webdriver.Chrome()
     driver.get(URL_TO_SCRAPE)
+    #time.sleep(10)
     allPosts = scrollPageToBottomAndFindPostLinks()
     
     #Concatenate all lists in one
