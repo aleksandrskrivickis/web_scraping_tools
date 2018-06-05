@@ -26,8 +26,13 @@ global URL_TO_SCRAPE, XLSX_OUTPUT_FILE_NAME, VERBOSE
 ##############################Methods:
 def updDelayScroller():
     global DELAY_SCROLLER
-    DELAY_SCROLLER = round(random.uniform(0.1, 2), 2)
-
+    DELAY_SCROLLER = round(random.uniform(1, 2), 2)
+    
+def scrollRandomUp(driver):
+    for a in range(1, random.randint(1, 5)):
+        driver.execute_script("window.scrollBy(0," + str(-(random.randint(768, 1055))) + ")")
+        time.sleep(round(random.uniform(0.1, 0.5), 2))
+    
 def scrollPageToBottomAndFindPostLinks():
     time.sleep(5)
     #Get total amount of posts:
@@ -50,7 +55,7 @@ def scrollPageToBottomAndFindPostLinks():
             newHeight = 1
             while prevHeight != newHeight:
                 prevHeight = int(driver.execute_script("return document.body.scrollHeight;"))
-                driver.execute_script("window.scrollBy(0," + str(-(random.randint(100, 10000))) + ")")
+                scrollRandomUp(driver)
                 driver.execute_script("window.scrollTo(0, document.body.scrollHeight)")
                 time.sleep(DELAY_SCROLLER)
                 updDelayScroller()#Random delay
@@ -87,9 +92,12 @@ def getPostData(driver):
     post_link = driver.current_url
     
     try:
-        image_link = driver.find_elements_by_tag_name('img')[1].get_attribute('src')
+        image_link = driver.find_element_by_xpath("//*[@id=\"react-root\"]/section/main/div/div/article/div[1]/div/div/div[2]").text
     except Exception as e:
-        image_link = ""
+        try:
+            image_link = driver.find_elements_by_tag_name('img')[1].get_attribute('src')
+        except Exception as ex:
+            image_link = ""
     
     if VERBOSE:
         try:
@@ -141,12 +149,14 @@ def getPostData(driver):
                 print("Exception in getPostData()'s date conversion(daysAgo) part.")
 
     firstRun = True
+    cnt = 0
     for a, c in zip(authors, comments):
         if firstRun:
             firstRun = False
-            postData.append({"post_link" : post_link, "image_link" : image_link, "post_author" : a, "post" : c, "likes": likes, "date": date, "comment": "", "comment_author": ""})
+            postData.append({"post_id": str(post_link.split("/")[4]), "post_link" : post_link, "image_link" : image_link, "post_author" : a, "post" : c, "likes": likes, "date": date, "comment": "N/A", "comment_author": "N/A"})
         else:
-            postData.append({"post_link" : post_link, "image_link" : image_link, "post_author" : "N/A", "post" : "N/A", "likes": "N/A", "date": date, "comment": c, "comment_author": a})
+            postData.append({"post_id": str(post_link.split("/")[4] + "_" + str(cnt)), "post_link" : post_link, "image_link" : image_link, "post_author" : authors[0], "post" : comments[0], "likes": "N/A", "date": date, "comment": c, "comment_author": a})
+            cnt += 1
     return postData
 
 def getAllCommentsFromArticle(driver):
@@ -211,6 +221,7 @@ def parseArgs():
 
     return args    
 
+
 ##############################Main me
 if __name__ == "__main__":
     #Getting global variables from arguments:
@@ -244,7 +255,7 @@ if __name__ == "__main__":
     #Export to file:
     allPostData = sum(allPostData, [])
     df = pd.DataFrame.from_dict(allPostData)
-    df = df.reindex(['post_link', "image_link", "post", "date", "post_author", "likes", "comment", "comment_author"], axis=1)
+    df = df.reindex(["post_id", 'post_link', "image_link", "date", "post", "post_author", "likes", "comment", "comment_author"], axis=1)
     df.index.name = "entry"
     #Sort by post date, keep post and comment order
     df.reset_index(level=0, inplace=True)
