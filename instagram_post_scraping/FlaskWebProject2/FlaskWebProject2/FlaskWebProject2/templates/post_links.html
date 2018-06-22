@@ -1,0 +1,26 @@
+{% extends "layout.html" %}
+
+{% block content %}
+
+<h2>{{title}}.</h2>
+
+{% if links %}
+<table class="table table-hover">
+    <tbody>
+        {% for link in links %}
+        <tr>
+            <td>
+                {{ loop.index0 }}
+            </td>
+            <td>
+                <a href=" {{link}}"> {{link}}</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% else %}
+<p>No posts available.</p>
+{% endif %}
+
+{% endblock %}
